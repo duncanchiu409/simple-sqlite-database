@@ -71,6 +71,17 @@ typedef struct{
     void* pages[TABLE_MAX_PAGES];
 } Table;
 
+void* row_slot(Table* table, uint32_t row_number){
+    uint32_t page_number = row_number / ROW_PER_PAGE;
+    void* page = table->page[page_number];
+    if(page == null){
+        page = table->page[page_number] = malloc(PAGE_SIZE);
+    }
+    uint32_t row_offset = row_number % ROW_PER_PAGE;
+    uint32_t bytes_offset = row_offset * TOTAL;
+    return page + bytes_offset;
+}
+
 InputBuffer* new_Input_Buffer(){
     InputBuffer* input_buffer = (InputBuffer*)malloc(sizeof(InputBuffer));
     input_buffer->buffer = NULL;
