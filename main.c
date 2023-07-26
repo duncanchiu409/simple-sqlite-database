@@ -1,11 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #define COLUMN_USERNAME_SIZE 32
 #define COLUMN_EMAIL_SIZE 255
 
 #define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
+// understand what is # define function in C
+// https://www.educba.com/sharp-define-in-c/
 
 typedef enum{
     META_COMMAND_SUCCESS,
@@ -22,6 +25,11 @@ typedef enum{
     PREPARE_UNRECOGNISED_STATEMENT,
     PREPARE_SYNTAX_ERROR
 } PrepareResult;
+
+typedef enum{
+    EXECUTE_SUCCESS,
+    EXECUTE_TABLE_FULL
+} ExecuteResult;
 
 typedef struct{
     uint32_t id;
@@ -71,11 +79,27 @@ typedef struct{
     void* pages[TABLE_MAX_PAGES];
 } Table;
 
+Table* new_table(){
+    Table* table = (Table*)malloc(sizeof(Table));
+    table->number_rows = 0;
+    for(uint32_t i = 0; i < TABLE_MAX_PAGES; i++){
+        table->pages[i] = NULL;
+    }
+    return table;
+}
+
+void close_table(Table* table){
+    for(uint32_t i = 0; table->pages[i]; i++){
+        free(table->pages[i]);
+    }
+    free(table);
+}
+
 void* row_slot(Table* table, uint32_t row_number){
     uint32_t page_number = row_number / ROW_PER_PAGE;
-    void* page = table->page[page_number];
-    if(page == null){
-        page = table->page[page_number] = malloc(PAGE_SIZE);
+    void* page = table->pages[page_number];
+    if(page == NULL){
+        page = table->pages[page_number] = malloc(PAGE_SIZE);
     }
     uint32_t row_offset = row_number % ROW_PER_PAGE;
     uint32_t bytes_offset = row_offset * TOTAL;
@@ -97,6 +121,10 @@ void close_Input_Buffer(InputBuffer* input_buffer){
 
 void print_prompt(){
     printf("sqlite > ");
+}
+
+void print_row(Row* row){
+    printf("(%d, %s, %s)\n", row->id, row->username, row->email);
 }
 
 void read_input(InputBuffer* input_buffer){
@@ -142,21 +170,45 @@ PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement)
     }
 }
 
-void execute_statement(Statement* statement){
+ExecuteResult execute_statement(Statement* statement, Table* table){
     switch(statement->type)
     {
         case(STATEMENT_INSERT):
-            printf("This is where we would do an insert.\n");
+            return execute_insert(statement, table);
             break;
         case(STATEMENT_SELECT):
-            printf("This is where we would do an select.\n");
+            return execute_select(statement, table);
             break;
         default:
+            printf("Unrecognized StatementType.\n");
             break;
     }
 }
 
+void execute_insert(Statement* statement, Table* table){
+    if(table->number_rows == TABLE_MAX_ROWS){
+        return EXECUTE_TABLE_FULL;
+    }
+
+    Row* row_inserting = &(statement->row_inserting);
+
+    serialise_row(row_inserting, row_slot(table, table->number_rows));
+    table->number_rows += 1;
+
+    return EXECUTE_SUCCESS;
+};
+
+void execute_select(Statement* statement, Table* table){
+    Row row;
+    for(uint32_t i = 0; i < table->number_rows; i++){
+        deserialise_row(row_slot(table, i), &row);
+        print_row(&row);
+    }
+    return EXECUTE_SUCCESS;
+}
+
 int main(int argc, char* argv[]){
+    Table* table = new_table();
     InputBuffer* input_buffer = new_Input_Buffer();
     while(1){
         print_prompt();
@@ -165,7 +217,7 @@ int main(int argc, char* argv[]){
         // understand keyword 'continue'
         // https://www.geeksforgeeks.org/difference-between-break-and-continue-statement-in-c/#:~:text=The%20continue%20statement%20is%20not%20used%20with%20the%20switch%20statement,from%20the%20loop%20construct%20immediately.
 
-        // meta-commands
+        // Meta-commands
         if(input_buffer->buffer[0] == '.'){
             switch(do_meta_command(input_buffer))
             {
@@ -175,6 +227,7 @@ int main(int argc, char* argv[]){
                 printf("Unrecognized command '%s'.\n", input_buffer->buffer);
                 break;
             default:
+                printf("Unrecognized MetaCommandResult.\n")
                 break;
             }
         }
@@ -184,13 +237,17 @@ int main(int argc, char* argv[]){
             switch (prepare_statement(input_buffer, &statement))
             {
             case (PREPARE_SUCCESS):
-                execute_statement(&statement);
+                execute_statement(&statement, table);
                 printf("Executed.\n");
+                break;
+            case (PREPARE_SYNTAX_ERROR):
+                printf("Syntax error. Could not parse statement.\n");
                 break;
             case (PREPARE_UNRECOGNISED_STATEMENT):
                 printf("Unrecognized command '%s'.\n", input_buffer->buffer);
                 break;
             default:
+                printf("Unrecognized PrepareResult.\n")
                 break;
             }
         }
