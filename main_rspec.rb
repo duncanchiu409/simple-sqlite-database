@@ -36,4 +36,37 @@ describe 'database' do
     result = run_script(script)
     expect(result[-2]).to eq("sqlite > Error: Table full.")
   end
+
+  it 'allows inserting strings that are the maximum length' do
+    long_username = "a"*32
+    long_email = "a"*255
+    script = [
+      "insert 1 #{long_username} #{long_email}",
+      "select",
+      ".exit",
+    ]
+    result = run_script(script)
+    expect(result).to match_array([
+      "sqlite > Executed.",
+      "sqlite > (1, #{long_username}, #{long_email})",
+      "Executed.",
+      "sqlite > ",
+    ])
+  end
+
+  it 'prints error message if strings are too long' do
+    long_username = "a"*33
+    long_email = "a"*256
+    script = [
+      "insert 1 #{long_username} #{long_email}",
+      "select",
+      ".exit",
+    ]
+    result = run_script(script)
+    expect(result).to match_array([
+      "sqlite > String is too long.",
+      "sqlite > Executed.",
+      "sqlite > ",
+    ])
+  end
 end
