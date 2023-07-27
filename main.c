@@ -238,8 +238,14 @@ int main(int argc, char* argv[]){
             switch (prepare_statement(input_buffer, &statement))
             {
             case (PREPARE_SUCCESS):
-                execute_statement(&statement, table);
-                printf("Executed.\n");
+                switch(execute_statement(&statement, table)){
+                    case(EXECUTE_SUCCESS):
+                        printf("Executed.\n");
+                        break;
+                    case(EXECUTE_TABLE_FULL):
+                        printf("Error: Table full.\n");
+                        break;
+                }
                 break;
             case (PREPARE_SYNTAX_ERROR):
                 printf("Syntax error. Could not parse statement.\n");
