@@ -128,7 +128,7 @@ void print_row(Row* row){
 }
 
 void read_input(InputBuffer* input_buffer){
-    size_t bytes_read = getline(&(input_buffer->buffer), &(input_buffer->buffer_length), stdin);
+    ssize_t bytes_read = getline(&(input_buffer->buffer), &(input_buffer->buffer_length), stdin);
 
     if(bytes_read <= 0){
         printf("Error reading input\n");
@@ -137,12 +137,13 @@ void read_input(InputBuffer* input_buffer){
     }
 
     input_buffer->input_length = bytes_read - 1;
-    input_buffer->buffer[bytes_read - 1] = '\0'; // replace newling char to end of line char
+    input_buffer->buffer[bytes_read - 1] = '\0'; // replace newline char to end of line char
 }
 
-MetaCommandResult do_meta_command(InputBuffer* input_buffer){
+MetaCommandResult do_meta_command(InputBuffer* input_buffer, Table* table){
     if(strcmp(input_buffer->buffer, ".exit") == 0){
         close_Input_Buffer(input_buffer);
+        close_table(table);
         exit(EXIT_SUCCESS);
     }
     else{
@@ -153,7 +154,7 @@ MetaCommandResult do_meta_command(InputBuffer* input_buffer){
 PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement){
     if(strncmp(input_buffer->buffer, "insert", 6) == 0){
         statement->type = STATEMENT_INSERT;
-        int arg_count = sscanf(input_buffer->buffer, "insert %d %s %s", statement->row_inserting.id, statement->row_inserting.username, statement->row_inserting.email);
+        int arg_count = sscanf(input_buffer->buffer, "insert %d %s %s", &(statement->row_inserting.id), statement->row_inserting.username, statement->row_inserting.email);
         if(arg_count < 3){
             return PREPARE_SYNTAX_ERROR;
         }
@@ -168,6 +169,28 @@ PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement)
     else{
         return PREPARE_UNRECOGNISED_STATEMENT;
     }
+}
+
+ExecuteResult execute_insert(Statement* statement, Table* table){
+    if(table->number_rows == TABLE_MAX_ROWS){
+        return EXECUTE_TABLE_FULL;
+    }
+
+    Row* row_inserting = &(statement->row_inserting);
+
+    serialise_row(row_inserting, row_slot(table, table->number_rows));
+    table->number_rows += 1;
+
+    return EXECUTE_SUCCESS;
+};
+
+ExecuteResult execute_select(Statement* statement, Table* table){
+    Row row;
+    for(uint32_t i = 0; i < table->number_rows; i++){
+        deserialise_row(row_slot(table, i), &row);
+        print_row(&row);
+    }
+    return EXECUTE_SUCCESS;
 }
 
 ExecuteResult execute_statement(Statement* statement, Table* table){
@@ -185,28 +208,6 @@ ExecuteResult execute_statement(Statement* statement, Table* table){
     }
 }
 
-void execute_insert(Statement* statement, Table* table){
-    if(table->number_rows == TABLE_MAX_ROWS){
-        return EXECUTE_TABLE_FULL;
-    }
-
-    Row* row_inserting = &(statement->row_inserting);
-
-    serialise_row(row_inserting, row_slot(table, table->number_rows));
-    table->number_rows += 1;
-
-    return EXECUTE_SUCCESS;
-};
-
-void execute_select(Statement* statement, Table* table){
-    Row row;
-    for(uint32_t i = 0; i < table->number_rows; i++){
-        deserialise_row(row_slot(table, i), &row);
-        print_row(&row);
-    }
-    return EXECUTE_SUCCESS;
-}
-
 int main(int argc, char* argv[]){
     Table* table = new_table();
     InputBuffer* input_buffer = new_Input_Buffer();
@@ -219,7 +220,7 @@ int main(int argc, char* argv[]){
 
         // Meta-commands
         if(input_buffer->buffer[0] == '.'){
-            switch(do_meta_command(input_buffer))
+            switch(do_meta_command(input_buffer, table))
             {
             case(META_COMMAND_SUCCESS):
                 break;
@@ -227,7 +228,7 @@ int main(int argc, char* argv[]){
                 printf("Unrecognized command '%s'.\n", input_buffer->buffer);
                 break;
             default:
-                printf("Unrecognized MetaCommandResult.\n")
+                printf("Unrecognized MetaCommandResult.\n");
                 break;
             }
         }
@@ -247,7 +248,7 @@ int main(int argc, char* argv[]){
                 printf("Unrecognized command '%s'.\n", input_buffer->buffer);
                 break;
             default:
-                printf("Unrecognized PrepareResult.\n")
+                printf("Unrecognized PrepareResult.\n");
                 break;
             }
         }
