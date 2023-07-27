@@ -23,7 +23,8 @@ typedef enum{
 typedef enum{
     PREPARE_SUCCESS,
     PREPARE_UNRECOGNISED_STATEMENT,
-    PREPARE_SYNTAX_ERROR
+    PREPARE_SYNTAX_ERROR,
+    PREPARE_STRING_TOO_LONG
 } PrepareResult;
 
 typedef enum{
@@ -151,16 +152,35 @@ MetaCommandResult do_meta_command(InputBuffer* input_buffer, Table* table){
     }
 }
 
+PrepareResult prepare_insert(InputBuffer* input_buffer, Statement* statement){
+    char* keyword = strtok(input_buffer->buffer, " ");
+    char* id_string = strtok(NULL, " ");
+    char* username = strtok(NULL, " ");
+    char* email = strtok(NULL, " ");
+
+    if(id_string == NULL || username == NULL || email == NULL){
+        return PREPARE_SYNTAX_ERROR;
+    }
+
+    int id = atoi(id_string);
+    if(strlen(username) > COLUMN_USERNAME_SIZE){
+        return PREPARE_STRING_TOO_LONG;
+    }
+    if(strlen(email) > COLUMN_EMAIL_SIZE){
+        return PREPARE_STRING_TOO_LONG;
+    }
+
+    statement->type = STATEMENT_INSERT;
+    statement->row_inserting.id = id;
+    strcpy(statement->row_inserting.username, username);
+    strcpy(statement->row_inserting.email, email);
+
+    return PREPARE_SUCCESS;
+}
+
 PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement){
     if(strncmp(input_buffer->buffer, "insert", 6) == 0){
-        statement->type = STATEMENT_INSERT;
-        int arg_count = sscanf(input_buffer->buffer, "insert %d %s %s", &(statement->row_inserting.id), statement->row_inserting.username, statement->row_inserting.email);
-        if(arg_count < 3){
-            return PREPARE_SYNTAX_ERROR;
-        }
-        else{
-            return PREPARE_SUCCESS;
-        }
+        return prepare_insert(input_buffer, statement);
     }
     else if(strcmp(input_buffer->buffer, "select") == 0){
         statement->type = STATEMENT_SELECT;
@@ -252,6 +272,9 @@ int main(int argc, char* argv[]){
                 break;
             case (PREPARE_UNRECOGNISED_STATEMENT):
                 printf("Unrecognized command '%s'.\n", input_buffer->buffer);
+                break;
+            case (PREPARE_STRING_TOO_LONG):
+                printf("String is too long.\n");
                 break;
             default:
                 printf("Unrecognized PrepareResult.\n");
