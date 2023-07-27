@@ -1,1 +1,1 @@
-# simple-sqlite-database
+# simple-sqlite-database-in-c
