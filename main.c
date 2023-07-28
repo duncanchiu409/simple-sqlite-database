@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
 
 #define COLUMN_USERNAME_SIZE 32
 #define COLUMN_EMAIL_SIZE 255
@@ -77,16 +80,47 @@ const uint32_t ROW_PER_PAGE = PAGE_SIZE / TOTAL;
 const uint32_t TABLE_MAX_ROWS = TABLE_MAX_PAGES * ROW_PER_PAGE;
 
 typedef struct{
-    uint32_t number_rows;
+    int file_descriptor;
+    uint32_t file_length;
     void* pages[TABLE_MAX_PAGES];
+} Pager;
+
+typedef struct{
+    uint32_t number_rows;
+    Pager* pager;
 } Table;
 
-Table* new_table(){
-    Table* table = (Table*)malloc(sizeof(Table));
-    table->number_rows = 0;
-    for(uint32_t i = 0; i < TABLE_MAX_PAGES; i++){
-        table->pages[i] = NULL;
+Pager* pager_open(const char* filename){
+    int file_descriptor = open(filename, O_RDWR | O_CREAT, S_IWUSR | S_IRUSR);
+
+    if(file_descriptor == -1){
+        printf("Unable to open file\n");
+        exit(EXIT_FAILURE);
     }
+
+    off_t file_length = lseek(file_descriptor, 0, SEEK_END);
+
+    if(file_length == -1){
+        printf("Unable to set fileDescriptor offset\n");
+        exit(EXIT_FAILURE);
+    }
+
+    Pager* pager = malloc(sizeof(Pager));
+    pager->file_descriptor = file_descriptor;
+    pager->file_length = file_length;
+    for(int i = 0; i < TABLE_MAX_PAGES; i++){
+        pager->pages[i] = NULL;
+    }
+    return pager;
+}
+
+Table* new_db(const char* filename){
+    Pager* pager = pager_open(filename);
+    uint32_t number_rows = pager->file_length / TOTAL;
+
+    Table* table = malloc(sizeof(Table));
+    table->number_rows = number_rows;
+    table->pager = pager;
     return table;
 }
 
@@ -97,12 +131,38 @@ void close_table(Table* table){
     free(table);
 }
 
+void* get_page(Pager* pager, uint32_t page_number){
+    if(page_number >= TABLE_MAX_PAGES){
+        printf("Tried to fetch page number out of bounds. %d > %d\n", page_number, TABLE_MAX_PAGES);
+        exit(EXIT_FAILURE);
+    }
+    else{
+        if(pager->pages[page_number] == NULL){
+            void* page = malloc(PAGE_SIZE);
+            uint32_t number_pages = pager->file_length / PAGE_SIZE;
+
+            if(pager->file_length % PAGE_SIZE){
+                number_pages += 1;
+            }
+
+            if(page_number <= number_pages){
+                lseek(pager->file_descriptor, number_pages*PAGE_SIZE, SEEK_SET);
+                ssize_t bytes_read = read(pager->file_descriptor, page, PAGE_SIZE);
+                if(bytes_read == -1){
+                    printf("Error reading file: %d\n", errno);
+                    exit(EXIT_FAILURE);
+                }
+            }
+            pager->pages[page_number] = page;
+        }
+    }
+    return pager->pages[page_number];
+}
+
 void* row_slot(Table* table, uint32_t row_number){
     uint32_t page_number = row_number / ROW_PER_PAGE;
-    void* page = table->pages[page_number];
-    if(page == NULL){
-        page = table->pages[page_number] = malloc(PAGE_SIZE);
-    }
+    void* page = get_page(table->pager, page_number);
+
     uint32_t row_offset = row_number % ROW_PER_PAGE;
     uint32_t bytes_offset = row_offset * TOTAL;
     return page + bytes_offset;
