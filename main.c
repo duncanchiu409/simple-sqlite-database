@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <errno.h>
 
+// written by duncanchiu409 credited to cstack
+
 #define COLUMN_USERNAME_SIZE 32
 #define COLUMN_EMAIL_SIZE 255
 
