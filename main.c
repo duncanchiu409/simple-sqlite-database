@@ -66,8 +66,8 @@ const uint32_t TOTAL = EMAIL_OFFSET + EMAIL_SIZE;
 
 void serialise_row(Row* source, void* destination){
     memcpy(destination + ID_OFFSET, &(source->id), ID_SIZE);
-    memcpy(destination + USERNAME_OFFSET, &(source->username), USERNAME_SIZE);
-    memcpy(destination + EMAIL_OFFSET, &(source->email), EMAIL_SIZE);
+    strncpy(destination + USERNAME_OFFSET, source->username, USERNAME_SIZE);
+    strncpy(destination + EMAIL_OFFSET, source->email, EMAIL_SIZE);
 }
 
 void deserialise_row(void* source, Row* destination){
@@ -148,6 +148,7 @@ void pager_flush(Pager* pager, uint32_t i, uint32_t page_size){
 void close_db(Table* table){
     Pager* pager = table->pager;
     uint32_t number_of_full_pages = table->number_of_rows / ROWS_PER_PAGE;
+    
     for(uint32_t i = 0; i < number_of_full_pages; i++){
         if(pager->pages[i]!=NULL){
             pager_flush(pager, i, PAGE_SIZE);
@@ -162,7 +163,8 @@ void close_db(Table* table){
         uint32_t page_number = number_of_full_pages;
         if(pager->pages[page_number]!=NULL){
             pager_flush(pager, page_number, number_of_additional_rows*TOTAL);
-
+            free(pager->pages[page_number]);
+            pager->pages[page_number] = NULL;
         }
     }
 
@@ -180,6 +182,7 @@ void close_db(Table* table){
             pager->pages[i] = NULL;
         }
     }
+
     free(pager);
     free(table);
 }
@@ -199,7 +202,7 @@ void* get_page(Pager* pager, uint32_t page_number){
             }
 
             if(page_number <= number_of_pages){
-                lseek(pager->file_descriptor, number_of_pages*PAGE_SIZE, SEEK_SET);
+                lseek(pager->file_descriptor, page_number*PAGE_SIZE, SEEK_SET);
                 ssize_t bytes_read = read(pager->file_descriptor, page, PAGE_SIZE);
                 if(bytes_read == -1){
                     printf("Error reading file: %d\n", errno);
