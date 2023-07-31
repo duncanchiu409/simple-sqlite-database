@@ -5,12 +5,14 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdbool.h>
 
 // written by duncanchiu409 credited to cstack
 // testing for push
 
 #define COLUMN_USERNAME_SIZE 32
 #define COLUMN_EMAIL_SIZE 255
+#define TABLE_MAX_PAGES 100
 
 #define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
 // understand what is # define function in C
@@ -45,6 +47,20 @@ typedef struct{
     char email[COLUMN_EMAIL_SIZE + 1];
 } Row;
 
+const uint32_t ID_SIZE = size_of_attribute(Row, id);
+const uint32_t USERNAME_SIZE = size_of_attribute(Row, username);
+const uint32_t EMAIL_SIZE = size_of_attribute(Row, email);
+
+const uint32_t ID_OFFSET = 0;
+const uint32_t USERNAME_OFFSET = ID_OFFSET + ID_SIZE;
+const uint32_t EMAIL_OFFSET = USERNAME_OFFSET + USERNAME_SIZE;
+const uint32_t TOTAL = EMAIL_OFFSET + EMAIL_SIZE;
+
+const uint32_t PAGE_SIZE = 4096; // 4kb
+
+const uint32_t ROWS_PER_PAGE = PAGE_SIZE / TOTAL;
+const uint32_t TABLE_MAX_ROWS = TABLE_MAX_PAGES * ROWS_PER_PAGE;
+
 typedef struct{
     StatementType type;
     Row row_inserting;
@@ -56,14 +72,43 @@ typedef struct{
     ssize_t input_length;
 } InputBuffer;
 
-const uint32_t ID_SIZE = size_of_attribute(Row, id);
-const uint32_t USERNAME_SIZE = size_of_attribute(Row, username);
-const uint32_t EMAIL_SIZE = size_of_attribute(Row, email);
+typedef struct{
+    int file_descriptor;
+    uint32_t file_length;
+    void* pages[TABLE_MAX_PAGES];
+} Pager;
 
-const uint32_t ID_OFFSET = 0;
-const uint32_t USERNAME_OFFSET = ID_OFFSET + ID_SIZE;
-const uint32_t EMAIL_OFFSET = USERNAME_OFFSET + USERNAME_SIZE;
-const uint32_t TOTAL = EMAIL_OFFSET + EMAIL_SIZE;
+typedef struct{
+    uint32_t number_of_rows;
+    Pager* pager;
+} Table;
+
+typedef struct{
+    Table* table;
+    uint32_t row_number;
+    bool end_of_table;
+} Cursor;
+
+Cursor* table_start(Table* table){
+    Cursor* cursor = malloc(sizeof(Cursor));
+    cursor->table = table;
+    cursor->row_number = 0;
+    if(table->number_of_rows == 0){
+        cursor->end_of_table = true;
+    }
+    else{
+        cursor->end_of_table = false;
+    }
+    return cursor;
+}
+
+Cursor* table_end(Table* table){
+    Cursor* cursor = malloc(sizeof(Cursor));
+    cursor->table = table;
+    cursor->row_number = table->number_of_rows;
+    cursor->end_of_table = true;
+    return cursor;
+}
 
 void serialise_row(Row* source, void* destination){
     memcpy(destination + ID_OFFSET, &(source->id), ID_SIZE);
@@ -76,22 +121,6 @@ void deserialise_row(void* source, Row* destination){
     memcpy(&(destination->username), source + USERNAME_OFFSET, USERNAME_SIZE);
     memcpy(&(destination->email), source + EMAIL_OFFSET, EMAIL_SIZE);
 }
-
-const uint32_t PAGE_SIZE = 4096; // 4kb
-#define TABLE_MAX_PAGES 100
-const uint32_t ROWS_PER_PAGE = PAGE_SIZE / TOTAL;
-const uint32_t TABLE_MAX_ROWS = TABLE_MAX_PAGES * ROWS_PER_PAGE;
-
-typedef struct{
-    int file_descriptor;
-    uint32_t file_length;
-    void* pages[TABLE_MAX_PAGES];
-} Pager;
-
-typedef struct{
-    uint32_t number_of_rows;
-    Pager* pager;
-} Table;
 
 Pager* pager_open(const char* filename){
     int file_descriptor = open(filename, O_RDWR | O_CREAT, S_IWUSR | S_IRUSR);
@@ -225,6 +254,23 @@ void* row_slot(Table* table, uint32_t row_number){
     return page + bytes_offset;
 }
 
+void* cursor_value(Cursor* cursor){
+    uint32_t row_number = cursor->row_number;
+    uint32_t page_number = row_number / ROWS_PER_PAGE;
+    void* page = get_page(cursor->table->pager, page_number);
+
+    uint32_t row_offset = row_number % ROWS_PER_PAGE;
+    uint32_t bytes_offset = row_offset * TOTAL;
+    return page + bytes_offset;
+}
+
+void advance_cursor(Cursor* cursor){
+    cursor->row_number+=1;
+    if(cursor->row_number >= cursor->table->number_of_rows){
+        cursor->end_of_table = true;
+    }
+}
+
 InputBuffer* new_Input_Buffer(){
     InputBuffer* input_buffer = (InputBuffer*)malloc(sizeof(InputBuffer));
     input_buffer->buffer = NULL;
@@ -318,17 +364,21 @@ ExecuteResult execute_insert(Statement* statement, Table* table){
     }
 
     Row* row_inserting = &(statement->row_inserting);
+    Cursor* end_cursor = table_end(table);
 
-    serialise_row(row_inserting, row_slot(table, table->number_of_rows));
+    serialise_row(row_inserting, cursor_value(end_cursor));
     table->number_of_rows += 1;
 
+    free(end_cursor);
     return EXECUTE_SUCCESS;
 };
 
 ExecuteResult execute_select(Statement* statement, Table* table){
     Row row;
-    for(uint32_t i = 0; i < table->number_of_rows; i++){
-        deserialise_row(row_slot(table, i), &row);
+    Cursor* start_cursor = table_start(table);
+    while(!start_cursor->end_of_table){
+        deserialise_row(cursor_value(start_cursor), &row);
+        advance_cursor(start_cursor);
         print_row(&row);
     }
     return EXECUTE_SUCCESS;
