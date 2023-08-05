@@ -29,8 +29,85 @@ BTreeNode* create_b_tree_node(int item, BTreeNode* child){
     return new_node;
 }
 
-void insertion(int item){
+void insertNode(int item, int pos, BTreeNode* node, BTreeNode* child){
+    int i = node->count;
+    while(i > pos){
+        node->keys[i+1] = node->keys[i];
+        node->children[i+1] = node->children[i];
+    }
+    node->keys[i+1] = item;
+    node->children[i+1] = child;
+    node->count++;
+}
+
+void splitNode(int value, int* i, int pos, BTreeNode* node, BTreeNode** child, BTreeNode** new_node){
+    int median;
+    int j;
+
+    // Find median
+    if(pos > MIN){
+        median = MIN + 1;
+    }
+    else{
+        median = MIN;
+    }
+
+    // Put children into new node
+    *new_node = (BTreeNode*)malloc(sizeof(BTreeNode));
+    j = median + 1;
+    while(j <= MAX){
+        (*new_node)->keys[j - median] = node->keys[j];
+        (*new_node)->children[j - median] = node->children[j];
+        j++;
+    }
+    node->count = median;
+    *new_node->count = MAX - median;
+
     
+}
+
+int setNodeValue(int item, int* i, BTreeNode* node, BTreeNode** child){
+    int pos;
+    if(!node){
+        *i = item;
+        *child = NULL;
+        return 1;
+    }
+
+    // Pick the right slot
+    if(item < node->children[1]){
+        pos = 0;
+    }
+    else{
+        for(pos = node->count; pos > 1 && item < node->children[pos]; pos--){
+            if(item == node->children[pos]){
+                printf("Duplicate are permitted\n");
+                return 0;
+            }
+        }
+    }
+
+    // Node operation
+    if(setNodeValue(item, &i, node->children[pos], child)){
+        if(node->count < MAX){
+            insertNode(*i, pos, node, *child);
+        }
+        else{
+            spliteNode();
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+void insertion(int item){
+    int flag;
+    int i;
+    BTreeNode* child;
+    if(setNodeValue(item, &i, root, &child)){
+        root = create_b_tree_node(i, child);
+    }
 }
 
 void print_b_tree_node(BTreeNode* tree_node, int level){
