@@ -3,44 +3,47 @@
 #include <stdio.h>
 
 #define MIN 2 // t = minimum degree of the b tree
-const int MAX = MIN * 2 - 1;
+enum { MAX = MIN * 2 - 1 };
+
+typedef struct _BTreeNode BTreeNode;
 
 // Both BTreeNode && keys are MAX + 1 because it require 
-typedef struct{
-    struct BTreeNode* children[MAX + 1];
+struct _BTreeNode{
+    BTreeNode* children[MAX + 1];
     int keys[MAX + 1];
     int count; // Current number of node
-} BTreeNode;
+};
 
-struct BTreeNode* root;
+BTreeNode* root;
 
-BTreeNode* create_b_tree_node(int item, BTreeNode* child){
+BTreeNode* create_b_tree_node(int value, BTreeNode* child){
     BTreeNode* new_node = (BTreeNode*)malloc(sizeof(BTreeNode));
-    if(new_node == -1){
+    if(new_node == NULL){
         printf("Create new B Tree node has failed.\n");
         exit(EXIT_FAILURE);
     }
 
-    new_node->keys[1] = item;
-    new_node->children[0] = root;
+    new_node->keys[1] = value;
     new_node->count = 1;
+    new_node->children[0] = root;
     new_node->children[1] = child;
 
     return new_node;
 }
 
-void insertNode(int item, int pos, BTreeNode* node, BTreeNode* child){
+void insertNode(int value, int pos, BTreeNode* node, BTreeNode* child){
     int i = node->count;
     while(i > pos){
         node->keys[i+1] = node->keys[i];
         node->children[i+1] = node->children[i];
+        i--;
     }
-    node->keys[i+1] = item;
+    node->keys[i+1] = value;
     node->children[i+1] = child;
     node->count++;
 }
 
-void splitNode(int value, int* i, int pos, BTreeNode* node, BTreeNode** child, BTreeNode** new_node){
+void splitNode(int value, int* pos_value, int pos, BTreeNode* node, BTreeNode* child, BTreeNode** new_node){
     int median;
     int j;
 
@@ -61,9 +64,20 @@ void splitNode(int value, int* i, int pos, BTreeNode* node, BTreeNode** child, B
         j++;
     }
     node->count = median;
-    *new_node->count = MAX - median;
+    (*new_node)->count = MAX - median;
 
+    // insert value into Node
+    if(pos < MIN){
+        insertNode(value, pos, node, child);
+    }
+    else{
+        insertNode(value, pos-median, *new_node, child);
+    }
     
+    // Moving median key and its children into some where else
+    *pos_value = node->keys[node->count];
+    (*new_node)->children[0] = node->children[node->count];
+    node->count--;
 }
 
 int setNodeValue(int item, int* i, BTreeNode* node, BTreeNode** child){
@@ -75,12 +89,12 @@ int setNodeValue(int item, int* i, BTreeNode* node, BTreeNode** child){
     }
 
     // Pick the right slot
-    if(item < node->children[1]){
+    if(item < node->keys[1]){
         pos = 0;
     }
     else{
-        for(pos = node->count; pos > 1 && item < node->children[pos]; pos--){
-            if(item == node->children[pos]){
+        for(pos = node->count; pos > 1 && item < node->keys[pos]; pos--){
+            if(item == node->keys[pos]){
                 printf("Duplicate are permitted\n");
                 return 0;
             }
@@ -88,12 +102,12 @@ int setNodeValue(int item, int* i, BTreeNode* node, BTreeNode** child){
     }
 
     // Node operation
-    if(setNodeValue(item, &i, node->children[pos], child)){
+    if(setNodeValue(item, i, node->children[pos], child)){
         if(node->count < MAX){
             insertNode(*i, pos, node, *child);
         }
         else{
-            spliteNode();
+            splitNode(*i, i, pos, node, *child, child);
             return 1;
         }
     }
@@ -110,23 +124,30 @@ void insertion(int item){
     }
 }
 
-void print_b_tree_node(BTreeNode* tree_node, int level){
-    if(tree_node->leaf == true){
-        printf("Level : %d, Keys: ", level);
-        for(int i = 0; i < tree_node->n; i++){
-            printf("%d", tree_node->keys[i]);
-        }
+// Duplication from example
+void traversal(BTreeNode* myNode) {
+  int i;
+  if (myNode) {
+    for (i = 0; i < myNode->count; i++) {
+      traversal(myNode->children[i]);
+      printf("%d ", myNode->keys[i + 1]);
     }
-}
-
-void print_b_tree(BTree* tree){
-    if(tree->root != NULL){
-        print_tree_node(tree->root, 0);
-    }
+    traversal(myNode->children[i]);
+  }
 }
 
 int main(int argc, char* arg[]){
-    BTree* tree = new_b_tree(MIN);
-    BTreeNode* tree_node = new_b_tree_node(MIN, false);
+    insertion(8);
+    insertion(9);
+    insertion(10);
+    insertion(11);
+    insertion(15);
+    insertion(16);
+    insertion(17);
+    insertion(18);
+    insertion(20);
+    insertion(23);
+
+    traversal(root);
     return 0;
 }
