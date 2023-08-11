@@ -121,11 +121,12 @@ typedef struct{
 typedef struct{
     int file_descriptor;
     uint32_t file_length;
+    uint32_t number_of_pages;
     void* pages[TABLE_MAX_PAGES];
 } Pager;
 
 typedef struct{
-    uint32_t number_of_rows;
+    uint32_t root_page_number;
     Pager* pager;
 } Table;
 
@@ -186,6 +187,13 @@ Pager* pager_open(const char* filename){
     Pager* pager = malloc(sizeof(Pager));
     pager->file_descriptor = file_descriptor;
     pager->file_length = file_length;
+    pager->number_of_pages = file_length / PAGE_SIZE;
+
+    if(file_length % PAGE_SIZE != 0){
+        printf("Db file is not a whole number of pages. Corrupt file.\n");
+        exit(EXIT_FAILURE);
+    }
+
     for(int i = 0; i < TABLE_MAX_PAGES; i++){
         pager->pages[i] = NULL;
     }
@@ -202,7 +210,7 @@ Table* new_db(const char* filename){
     return table;
 }
 
-void pager_flush(Pager* pager, uint32_t i, uint32_t page_size){
+void pager_flush(Pager* pager, uint32_t i){
     if(pager->pages[i]==NULL){
         printf("Tried to flush null page.\n");
         exit(EXIT_FAILURE);
@@ -214,7 +222,7 @@ void pager_flush(Pager* pager, uint32_t i, uint32_t page_size){
         exit(EXIT_FAILURE);
     }
 
-    ssize_t bytes_written = write(pager->file_descriptor, pager->pages[i], page_size);
+    ssize_t bytes_written = write(pager->file_descriptor, pager->pages[i], PAGE_SIZE);
     if(bytes_written == -1){
         printf("Error writing: %d\n", errno);
         exit(EXIT_FAILURE);
@@ -223,24 +231,12 @@ void pager_flush(Pager* pager, uint32_t i, uint32_t page_size){
 
 void close_db(Table* table){
     Pager* pager = table->pager;
-    uint32_t number_of_full_pages = table->number_of_rows / ROWS_PER_PAGE;
     
-    for(uint32_t i = 0; i < number_of_full_pages; i++){
+    for(uint32_t i = 0; i < pager->file_length; i++){
         if(pager->pages[i]!=NULL){
-            pager_flush(pager, i, PAGE_SIZE);
+            pager_flush(pager, i);
             free(pager->pages[i]);
             pager->pages[i] = NULL;
-        }
-    }
-
-    // There might be partial pages
-    uint32_t number_of_additional_rows = table->number_of_rows % ROWS_PER_PAGE;
-    if(number_of_additional_rows > 0){
-        uint32_t page_number = number_of_full_pages;
-        if(pager->pages[page_number]!=NULL){
-            pager_flush(pager, page_number, number_of_additional_rows*TOTAL);
-            free(pager->pages[page_number]);
-            pager->pages[page_number] = NULL;
         }
     }
 
@@ -286,6 +282,10 @@ void* get_page(Pager* pager, uint32_t page_number){
                 }
             }
             pager->pages[page_number] = page;
+
+            if(page_number > pager->number_of_pages){
+                pager->number_of_pages += 1;
+            }
         }
     }
     return pager->pages[page_number];
