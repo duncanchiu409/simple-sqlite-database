@@ -19,6 +19,11 @@
 // https://www.educba.com/sharp-define-in-c/
 
 typedef enum{
+    NODE_INTERNAL,
+    NODE_LEAF
+} NodeType;
+
+typedef enum{
     META_COMMAND_SUCCESS,
     META_COMMAND_UNRECOGNISED_COMMAND
 } MetaCommandResult;
@@ -60,6 +65,47 @@ const uint32_t PAGE_SIZE = 4096; // 4kb
 
 const uint32_t ROWS_PER_PAGE = PAGE_SIZE / TOTAL;
 const uint32_t TABLE_MAX_ROWS = TABLE_MAX_PAGES * ROWS_PER_PAGE;
+
+// WHY variable type used here is so weird?
+const uint32_t NODE_TYPE_SIZE = sizeof(uint8_t); // WHY unsigned 8 bits?
+const uint32_t NODE_OFFSET = 0;
+const uint32_t IS_ROOT_SIZE = sizeof(uint8_t);
+const uint32_t IS_ROOT_OFFSET = NODE_TYPE_SIZE + NODE_OFFSET;
+const uint32_t PARENT_POINTER_SIZE = sizeof(uint32_t);
+const uint32_t PARENT_POINTER_OFFSET = IS_ROOT_OFFSET + IS_ROOT_SIZE;
+const uint8_t COMMON_NODE_HEADER_SIZE = PARENT_POINTER_SIZE + PARENT_POINTER_OFFSET;
+
+const uint32_t LEAF_NODE_NUM_OF_CELLS_SIZE = sizeof(uint32_t);
+const uint32_t LEAF_NODE_NUM_OF_CELLS_OFFSET = COMMON_NODE_HEADER_SIZE;
+const uint32_t LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_OF_CELLS_SIZE;
+
+const uint32_t LEAF_NODE_KEY_SIZE = sizeof(uint32_t);
+const uint32_t LEAF_NODE_KEY_OFFSET = 0;
+const uint32_t LEAF_NODE_VALUE_SIZE = TOTAL;
+const uint32_t LEAF_NODE_VALUE_OFFSET = LEAF_NODE_KEY_OFFSET + LEAF_NODE_VALUE_SIZE;
+const uint32_t LEAF_NODE_CELL_SIZE = LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE;
+const uint32_t LEAF_NODE_SPACE_FOR_CELLS = PAGE_SIZE - LEAF_NODE_HEADER_SIZE;
+const uint32_t LEAF_NODE_MAX_NUM_OF_CELLS = LEAF_NODE_SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE;
+
+uint32_t* get_leaf_node_num_cells_ptr(void* node){
+    return node + LEAF_NODE_NUM_OF_CELLS_SIZE;
+}
+
+void* get_leaf_node_cell_ptr(void* node, uint32_t cell_num){
+    return node + LEAF_NODE_HEADER_SIZE + LEAF_NODE_CELL_SIZE * cell_num;
+}
+
+uint32_t* get_leaf_node_key_ptr(void* node, uint32_t cell_num){
+    return get_leaf_node_cell_ptr(node, cell_num) + LEAF_NODE_KEY_OFFSET;
+}
+
+void* get_leaf_node_value_ptr(void* node, uint32_t cell_num){
+    return get_leaf_node_cell_ptr(node, cell_num) + LEAF_NODE_VALUE_OFFSET;
+}
+
+void* initialize_leaf_node(void* node){
+    (*get_leaf_node_num_cells_ptr(node)) = 0;
+}
 
 typedef struct{
     StatementType type;
