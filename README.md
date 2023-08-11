@@ -1,4 +1,6 @@
 # Simple Sqlite Database in C
+## Sqlite Database
+![My Image](./assets/sqlite-architecture.svg)  
 ## Useful Resources for Learning Concept
 Database Cursor  
 https://www.ibm.com/docs/en/informix-servers/14.10?topic=sql-database-cursor#:~:text=A%20database%20cursor%20is%20an,statement%20requires%20a%20select%20cursor  
