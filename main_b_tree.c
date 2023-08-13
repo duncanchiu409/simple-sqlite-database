@@ -132,27 +132,37 @@ typedef struct{
 
 typedef struct{
     Table* table;
-    uint32_t row_number;
+    uint32_t page_number;
+    uint32_t cell_number;
     bool end_of_table;
 } Cursor;
 
 Cursor* table_start(Table* table){
     Cursor* cursor = malloc(sizeof(Cursor));
     cursor->table = table;
-    cursor->row_number = 0;
-    if(table->number_of_rows == 0){
+    cursor->page_number = table->root_page_number;
+    cursor->cell_number = 0;
+
+    void* root_node = get_page(table->pager, table->root_page_number);
+    uint32_t cell_number = *get_leaf_node_num_cells_ptr(root_node);
+    if(cell_number == 0){
         cursor->end_of_table = true;
     }
     else{
         cursor->end_of_table = false;
     }
+    
     return cursor;
 }
 
 Cursor* table_end(Table* table){
     Cursor* cursor = malloc(sizeof(Cursor));
     cursor->table = table;
-    cursor->row_number = table->number_of_rows;
+    cursor->page_number = table->root_page_number; // Why would we use root_page_number?
+
+    void* root_node = get_page(table->pager, table->root_page_number);
+    cursor->cell_number = *get_leaf_node_num_cells_ptr(root_node);
+
     cursor->end_of_table = true;
     return cursor;
 }
@@ -301,18 +311,15 @@ void* row_slot(Table* table, uint32_t row_number){
 }
 
 void* cursor_value(Cursor* cursor){
-    uint32_t row_number = cursor->row_number;
-    uint32_t page_number = row_number / ROWS_PER_PAGE;
-    void* page = get_page(cursor->table->pager, page_number);
-
-    uint32_t row_offset = row_number % ROWS_PER_PAGE;
-    uint32_t bytes_offset = row_offset * TOTAL;
-    return page + bytes_offset;
+    void* page = get_page(cursor->table->pager, cursor->page_number);
+    return get_leaf_node_value_ptr(page, cursor->cell_number);
 }
 
 void advance_cursor(Cursor* cursor){
-    cursor->row_number+=1;
-    if(cursor->row_number >= cursor->table->number_of_rows){
+    void* page = get_page(cursor->table->pager ,cursor->page_number);
+    cursor->cell_number += 1;
+    
+    if(cursor->cell_number >= *get_leaf_node_num_cells_ptr(page)){
         cursor->end_of_table = true;
     }
 }
