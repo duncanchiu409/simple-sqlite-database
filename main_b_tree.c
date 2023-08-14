@@ -103,8 +103,8 @@ void* get_leaf_node_value_ptr(void* node, uint32_t cell_num){
     return get_leaf_node_cell_ptr(node, cell_num) + LEAF_NODE_VALUE_OFFSET;
 }
 
-void* initialize_leaf_node(void* node){
-    (*get_leaf_node_num_cells_ptr(node)) = 0;
+void initialize_leaf_node(void* node){
+    *get_leaf_node_num_cells_ptr(node) = 0;
 }
 
 typedef struct{
@@ -144,6 +144,38 @@ void print_constants(){
     printf("LEAF_NODE_CELL_SIZE: %d\n", LEAF_NODE_CELL_SIZE);
     printf("LEAF_NODE_SPACE_FOR_CELLS: %d\n", LEAF_NODE_SPACE_FOR_CELLS);
     printf("LEAF_NODE_MAX_CELLS: %d\n", LEAF_NODE_MAX_NUM_OF_CELLS);
+}
+
+void* get_page(Pager* pager, uint32_t page_number){
+    if(page_number >= TABLE_MAX_PAGES){
+        printf("Tried to fetch page number out of bounds. %d > %d\n", page_number, TABLE_MAX_PAGES);
+        exit(EXIT_FAILURE);
+    }
+    else{
+        if(pager->pages[page_number] == NULL){
+            void* page = malloc(PAGE_SIZE);
+            uint32_t number_of_pages = pager->file_length / PAGE_SIZE;
+
+            if(pager->file_length % PAGE_SIZE){
+                number_of_pages += 1;
+            }
+
+            if(page_number <= number_of_pages){
+                lseek(pager->file_descriptor, page_number*PAGE_SIZE, SEEK_SET);
+                ssize_t bytes_read = read(pager->file_descriptor, page, PAGE_SIZE);
+                if(bytes_read == -1){
+                    printf("Error reading file: %d\n", errno);
+                    exit(EXIT_FAILURE);
+                }
+            }
+            pager->pages[page_number] = page;
+
+            if(page_number > pager->number_of_pages){
+                pager->number_of_pages += 1;
+            }
+        }
+    }
+    return pager->pages[page_number];
 }
 
 Cursor* table_start(Table* table){
@@ -285,7 +317,7 @@ void pager_flush(Pager* pager, uint32_t i){
 void close_db(Table* table){
     Pager* pager = table->pager;
     
-    for(uint32_t i = 0; i < pager->file_length; i++){
+    for(uint32_t i = 0; i < pager->number_of_pages; i++){
         if(pager->pages[i]!=NULL){
             pager_flush(pager, i);
             free(pager->pages[i]);
@@ -310,38 +342,6 @@ void close_db(Table* table){
 
     free(pager);
     free(table);
-}
-
-void* get_page(Pager* pager, uint32_t page_number){
-    if(page_number >= TABLE_MAX_PAGES){
-        printf("Tried to fetch page number out of bounds. %d > %d\n", page_number, TABLE_MAX_PAGES);
-        exit(EXIT_FAILURE);
-    }
-    else{
-        if(pager->pages[page_number] == NULL){
-            void* page = malloc(PAGE_SIZE);
-            uint32_t number_of_pages = pager->file_length / PAGE_SIZE;
-
-            if(pager->file_length % PAGE_SIZE){
-                number_of_pages += 1;
-            }
-
-            if(page_number <= number_of_pages){
-                lseek(pager->file_descriptor, page_number*PAGE_SIZE, SEEK_SET);
-                ssize_t bytes_read = read(pager->file_descriptor, page, PAGE_SIZE);
-                if(bytes_read == -1){
-                    printf("Error reading file: %d\n", errno);
-                    exit(EXIT_FAILURE);
-                }
-            }
-            pager->pages[page_number] = page;
-
-            if(page_number > pager->number_of_pages){
-                pager->number_of_pages += 1;
-            }
-        }
-    }
-    return pager->pages[page_number];
 }
 
 void* row_slot(Table* table, uint32_t row_number){
