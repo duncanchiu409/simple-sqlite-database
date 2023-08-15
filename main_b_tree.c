@@ -170,7 +170,7 @@ void* get_page(Pager* pager, uint32_t page_number){
             }
             pager->pages[page_number] = page;
 
-            if(page_number > pager->number_of_pages){
+            if(page_number >= pager->number_of_pages){
                 pager->number_of_pages += 1;
             }
         }
