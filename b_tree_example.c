@@ -142,22 +142,48 @@ void traversal(struct BTreeNode *myNode) {
   }
 }
 
+void print_tree(struct BTreeNode* x, int l){
+  printf("Level %d %d :", l, x->count);
+  int i = 1;
+  while(i <= x->count){
+    printf("%d ", x->val[i]);
+    i++;
+  }
+  printf("\n");
+  l+=1;
+  int k = 0;
+  while(k <= MAX && x->link[k] != NULL){
+    print_tree(x->link[k], l);
+    k++;
+  }
+}
+
 int main() {
   int val, ch;
 
   insert(8);
+  // print_tree(root, 0);
   insert(9);
+  // print_tree(root, 0);
   insert(10);
+  // print_tree(root, 0);
   insert(11);
+  // print_tree(root, 0);
   insert(15);
+  // print_tree(root, 0);
   insert(16);
+  // print_tree(root, 0);
   insert(17);
+  // print_tree(root, 0);
   insert(18);
+  // print_tree(root, 0);
   insert(20);
+  // print_tree(root, 0);
   insert(23);
+  print_tree(root, 0);
 
-  traversal(root);
+  // traversal(root);
 
   printf("\n");
-  search(11, &ch, root);
+  // search(11, &ch, root);
 }
